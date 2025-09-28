@@ -33,6 +33,8 @@
 (define-constant ERR_INSUFFICIENT_LIQUIDITY_FOR_SWAP (err u206)) ;; insufficient liquidity in pool for swap
 (define-constant ERR_INSUFFICIENT_1_AMOUNT (err u207)) ;; insufficient amount of token 1 for swap
 (define-constant ERR_INSUFFICIENT_0_AMOUNT (err u208)) ;; insufficient amount of token 0 for swap
+(define-constant ERR_INSUFFICIENT_OUTPUT_AMOUNT (err u209)) ;; insuficient output amount, 
+;; when someone tries to give less tokens than you expect, this error comes up for slippage protection
 
 ;;----------------------------------
 ;; MAPINGS
@@ -444,10 +446,21 @@
 )
 
 ;; SWAP
+;;------------------------------------------------------------------------------------------
+;; Terese's upgraded trading function. After learning about slippage in DeFi, 
+;; I realized that users needed protection from getting robbed. 
+;; This function now has my "minimum guarantee" feature if you don't get what you expected, 
+;; the trade fails
+;;------------------------------------------------------------------------------------------
 ;; swaps two tokens in a given pool
 ;; ensure the pool exists, calculate the amount of tokens to give back to the user, handle the case where the user is swapping for token-0 or token-1
 ;; transfer input token from user to pool, transfer output token from pool to user, and update mappings as needed
-(define-public (swap (token-0 <ft-trait>) (token-1 <ft-trait>) (fee uint) (input-amount uint) (zero-for-one bool)) 
+(define-public (swap 
+    (token-0 <ft-trait>) 
+    (token-1 <ft-trait>) 
+    (fee uint) 
+    (input-amount uint) 
+    (zero-for-one bool) (min-amount-out uint)) 
     (let
         (
             ;; compute the pool id and fetch the current state of the pool from the mapping
@@ -511,6 +524,9 @@
         ;; make sure we can afford to do this swap (have enough output tokens to give back to user)
         (asserts! (< output-amount-sub-fees output-balance) ERR_INSUFFICIENT_LIQUIDITY_FOR_SWAP)
 
+        ;; SLIPPAGE PROTECTION: make sure the user gets at least their minimum expected amount
+        (asserts! (>= output-amount-sub-fees min-amount-out) ERR_INSUFFICIENT_OUTPUT_AMOUNT)
+
         ;; transfer input token from user to pool
         (try! (contract-call? input-token transfer input-amount sender THIS_CONTRACT none))
 
@@ -524,7 +540,12 @@
         }))
 
         ;; log the swap transaction for external monitoring
-        (print { action: "swap", pool-id: pool-id, input-amount: input-amount })
+        (print { action: "swap", 
+            pool-id: pool-id, 
+            input-amount: input-amount, 
+            output-amount: output-amount-sub-fees, 
+            min-amount-out: min-amount-out }
+        )
 
         ;; confirms successful token swap
         (ok true)
