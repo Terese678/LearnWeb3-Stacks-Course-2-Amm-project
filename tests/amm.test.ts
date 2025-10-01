@@ -1,4 +1,3 @@
-
 import { Cl } from "@stacks/transactions";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -46,19 +45,16 @@ function removeLiquidity(account: string, liquidity: number) {
   );
 }
 
-function swap(account: string, inputAmount: number, zeroForOne: boolean) {
-  return simnet.callPublicFn(
-    "amm",
-    "swap",
-    [
-      mockTokenOne,
-      mockTokenTwo,
-      Cl.uint(500),
-      Cl.uint(inputAmount),
-      Cl.bool(zeroForOne),
-    ],
-    account
-  );
+// ENHANCED VERSION (with slippage protection)
+function swap(caller: string, amountIn: number, aToB: boolean, minAmountOut: number = 0) {
+  return simnet.callPublicFn("amm", "swap", [
+    mockTokenOne,                   
+    mockTokenTwo,                   
+    Cl.uint(500),                   
+    Cl.uint(amountIn),              
+    Cl.bool(aToB),                  
+    Cl.uint(minAmountOut)           // NEW: Slippage protection parameter
+  ], caller);
 }
 
 function getPoolId() {
@@ -198,5 +194,87 @@ describe("AMM Tests", () => {
     );
     expect(tokenTwoAmountWithdrawn).toBeLessThan(withdrawableTokenTwoPreSwap);
   });
+});
+
+// SLIPPAGE PROTECTION TEST
+// =======================
+// This test validates the slippage protection feature I added to the original AMM contract
+// The original LearnWeb3 course contract did not have slippage protection, which is a critical
+// feature for production AMMs
+it("should enforce slippage protection with min-amount-out", () => {
+  // STEP 1: create a new pool with unique fee for isolated testing
+  // using fee=999 to ensure this test doesn't interfere with other pool tests
+  const createPoolRes = simnet.callPublicFn(
+    "amm",
+    "create-pool",
+    [mockTokenOne, mockTokenTwo, Cl.uint(999)], // very unique fee to avoid conflicts
+    alice
+  );
+  expect(createPoolRes.result).toBeOk(Cl.bool(true));
+  console.log("Pool created successfully");
+
+  // STEP 2: add initial liquidity to establish a price ratio
+  // this creates the baseline for our slippage protection testing
+  console.log("About to add liquidity...");
+  const addLiqRes = simnet.callPublicFn(
+    "amm",
+    "add-liquidity",
+    [
+      mockTokenOne,
+      mockTokenTwo,
+      Cl.uint(999),     // same unique token fee
+      Cl.uint(1000000), // 1M token-0 - establishes initial reserves
+      Cl.uint(500000),  // 500K token-1 - creates 2:1 ratio (token-0:token-1)
+      Cl.uint(0),       // Min amounts (not relevant for first liquidity)
+      Cl.uint(0),
+    ],
+    alice
+  );
+  
+  console.log("Add liquidity result:", addLiqRes.result);
+  
+  // Debug logging to verify token balances after liquidity provision
+  const aliceBalance1 = simnet.callReadOnlyFn("mock-token", "get-balance", [Cl.principal(alice)], alice);
+  const aliceBalance2 = simnet.callReadOnlyFn("mock-token-2", "get-balance", [Cl.principal(alice)], alice);
+  console.log("Alice balance token 1:", aliceBalance1.result);
+  console.log("Alice balance token 2:", aliceBalance2.result);
+  
+  if (addLiqRes.result.type === "ok") {
+    expect(addLiqRes.result).toBeOk(Cl.bool(true));
+
+    const debugSwapAmount = 100000; // Amount to swap in both test scenarios
+    
+    // STEP 3: TEST SUCCESSFUL SWAP - Low slippage tolerance (should pass)
+    // This tests that swaps work when min-amount-out is reasonable
+    const successResult = simnet.callPublicFn("amm", "swap", [
+      mockTokenOne,                       // token being sold
+      mockTokenTwo,                       // token being bought  
+      Cl.uint(999),                       // pool fee
+      Cl.uint(debugSwapAmount),           // amount to swap (100k tokens)
+      Cl.bool(true),                      // direction: A->B (token-0 to token-1)
+      Cl.uint(1)                          // SLIPPAGE PROTECTION: very low min-out (1 token)
+    ], alice);
+    
+    // Verify the swap succeeded and generated the expected events
+    expect(successResult.result).toBeOk(Cl.bool(true));
+    expect(successResult.events.length).toBe(3);
+    
+    // STEP 4: TEST FAILED SWAP - High slippage tolerance (should fail)  
+    // This is the core test of my slippage protection feature
+    const failResult = simnet.callPublicFn("amm", "swap", [
+      mockTokenOne,                     // same token being sold
+      mockTokenTwo,                     // same token being bought
+      Cl.uint(999),                     // same pool fee
+      Cl.uint(debugSwapAmount),         // same swap amount (100k tokens)
+      Cl.bool(true),                    // same direction: A->B
+      Cl.uint(50000)                    // SLIPPAGE PROTECTION: nnrealistic min-out (50k tokens)
+                                        // this should FAIL because actual output < 50k
+                                        // (based on previous swap, we know output ≈ 43k tokens)
+    ], alice);
+    
+    // CRITICAL ASSERTION: verify my slippage protection correctly rejects the swap
+    // error code 209 is the slippage protection error I implemented in the contract
+    expect(failResult.result).toBeErr(Cl.uint(209));  // MY CUSTOM ERROR: slippage too high
+  }
 });
 
