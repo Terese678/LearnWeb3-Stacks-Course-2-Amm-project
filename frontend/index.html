@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMM Slippage Protection Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 14px;
+        }
+
+        .wallet-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+        }
+
+        .wallet-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .wallet-address {
+            font-size: 12px;
+            color: #4a5568;
+            font-family: monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .slippage-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .slippage-btn {
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .slippage-btn:hover {
+            border-color: #667eea;
+        }
+
+        .slippage-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .info-box {
+            background: #edf2f7;
+            border-left: 4px solid #667eea;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .info-box-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .info-box-content {
+            font-size: 14px;
+            color: #4a5568;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #38a169;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #e53e3e;
+        }
+
+        .alert-warning {
+            background: #feebc8;
+            color: #7c2d12;
+            border-left: 4px solid #dd6b20;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ AMM Slippage Protection</h1>
+            <p>Secure token swaps with built-in slippage protection</p>
+        </div>
+
+        <!-- Wallet Connection Section -->
+        <div class="wallet-section">
+            <div class="wallet-status">
+                <div>
+                    <div id="walletAddress" class="wallet-address hidden"></div>
+                    <div id="notConnected">Not Connected</div>
+                </div>
+                <button id="connectWalletBtn" class="btn btn-primary">Connect Wallet</button>
+            </div>
+        </div>
+
+        <!-- Alert Messages -->
+        <div id="alertContainer"></div>
+
+        <!-- Swap Form -->
+        <div id="swapForm" class="hidden">
+            <form id="swapFormElement">
+                <!-- Amount Input -->
+                <div class="form-group">
+                    <label class="form-label" for="swapAmount">Amount to Swap</label>
+                    <input 
+                        type="number" 
+                        id="swapAmount" 
+                        class="form-input" 
+                        placeholder="Enter amount (e.g., 100000)"
+                        min="1"
+                        required
+                    >
+                    <div class="help-text">Number of tokens you want to swap</div>
+                </div>
+
+                <!-- Slippage Tolerance -->
+                <div class="form-group">
+                    <label class="form-label">Slippage Tolerance</label>
+                    <div class="slippage-buttons">
+                        <button type="button" class="slippage-btn active" data-slippage="0.5">
+                            0.5%<br><span style="font-size: 11px; font-weight: 400;">Strict</span>
+                        </button>
+                        <button type="button" class="slippage-btn" data-slippage="1">
+                            1%<br><span style="font-size: 11px; font-weight: 400;">Normal</span>
+                        </button>
+                        <button type="button" class="slippage-btn" data-slippage="5">
+                            5%<br><span style="font-size: 11px; font-weight: 400;">Flexible</span>
+                        </button>
+                    </div>
+                    <div class="help-text">Maximum price movement you'll accept</div>
+                </div>
+
+                <!-- Swap Details Preview -->
+                <div id="swapPreview" class="info-box hidden">
+                    <div class="info-box-title">Swap Details</div>
+                    <div class="info-box-content">
+                        <div class="info-row">
+                            <span>Expected Output:</span>
+                            <strong id="expectedOutput">-</strong>
+                        </div>
+                        <div class="info-row">
+                            <span>Minimum Received:</span>
+                            <strong id="minimumOutput">-</strong>
+                        </div>
+                        <div class="info-row">
+                            <span>Slippage Protection:</span>
+                            <strong id="slippageProtection">0.5%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" id="swapBtn" class="btn btn-primary" style="width: 100%;" disabled>
+                    Calculate & Preview Swap
+                </button>
+            </form>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Processing transaction...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ AMM is a smart contract that creates a decentralized trading system on the Stack
 - **Add Liquidity**: Liquidity providers earn fees from every trade.
 - **Token Swapping**: Trade one token for another.
 - **Remove Liquidity**: take your tokens back anytime you want.
-- **Fee Collectiont**: Earn small fees from every trade in your pools.
+- **Fee Collection**: Earn small fees from every trade in your pools.
 
 ## Key Features
 
@@ -54,12 +54,58 @@ Anyone can become a liquidity provider or trader with no special permissions nee
 # Mock Token Contract (`mock-token.clar`)
 - `transfer`: Move tokens between accounts.
 - `mint`: Create new tokens for testing.
-- `get-name`: Returns “Mock Token”.
-- `get-symbol`: Returns “MT”.
+- `get-name`: Returns "Mock Token".
+- `get-symbol`: Returns "MT".
 - `get-decimals`: Returns 6 (for precision).
-- `get-balance`: Check a user’s token balance.
+- `get-balance`: Check a user's token balance.
 - `get-total-supply`: View total tokens in circulation.
 - `get-token-uri`: Returns none (for learning).
+
+# Slippage Protection Feature (New Addition)
+
+## What I Added
+
+# Smart Contract Enhancement
+I added slippage protection to the `swap` function to protect traders from unfavorable price changes:
+
+- **New Error Constant**: `ERR_INSUFFICIENT_OUTPUT_AMOUNT` (u209) - triggers when output is below minimum
+- **New Parameter**: `min-amount-out` - minimum tokens the trader will accept
+- **Protection Logic**: `(asserts! (>= amount-out min-amount-out) ERR_INSUFFICIENT_OUTPUT_AMOUNT)`
+- **Updated Events**: Swap logs now include minimum amount for tracking
+- **Comprehensive Tests**: Added test cases for slippage protection scenarios
+
+# Frontend Implementation (`frontend/` folder)
+
+Built a complete web interface to interact with the AMM contract:
+
+**Features:**
+- **Wallet Connection**: Integrates with Leather wallet (supports other Stacks wallets too)
+- **Slippage Settings**: Choose tolerance level (0.5%, 1%, or 5%)
+- **Live Calculations**: Shows expected output based on AMM formula, displays minimum tokens you'll accept (slippage protection), real-time updates as you adjust amount or slippage
+- **Transaction Execution**: Sends swap transaction to blockchain with protection
+- **Error Handling**: Detects when slippage protection triggers (ERR 209)
+
+**Files:**
+- `frontend/index.html` - User interface with swap form and slippage controls
+- `frontend/app.js` - JavaScript logic with detailed comments 
+
+## How Slippage Protection Works
+
+When you swap tokens, the price might change between when you click "swap" and when the transaction processes. Slippage protection ensures you don't get a worse deal than expected
+
+1. **You set tolerance**: Choose 0.5% (strict), 1% (balanced), or 5% (flexible)
+2. **App calculates minimum**: If you expect 1000 tokens with 1% slippage, minimum is 990 tokens
+3. **Contract enforces**: If actual output < 990 tokens, transaction fails with ERR 209
+4. **You're protected**: Your tokens are safe, try again with higher slippage or better timing
+
+# Testing the Frontend
+
+1. **Install Leather Wallet**: Get it from https://leather.io/install-extension
+2. **Switch to Testnet4**: In Leather settings, change network to Testnet4
+3. **Open Frontend**: Open `frontend/index.html` in your browser
+4. **Connect Wallet**: Click "Connect Wallet" and approve in Leather
+5. **Test Swap**: Enter amount (e.g., 100000), select slippage (try 0.5% for strict protection), click "Execute Swap", approve in Leather popup
+6. **Watch Protection**: If price moves too much, you'll see "Slippage Protection Triggered!"
 
 # Testing & Development
 1. Install Clarinet from https://github.com/hirosystems/clarinet/releases
